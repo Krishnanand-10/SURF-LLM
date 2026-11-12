@@ -21,6 +21,9 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel
 
+# Ensure src is in python path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
+
 from surf.evaluation.evaluator import SafetyAuditor
 from surf.evaluation.reasoning_metrics import DEFAULT_MMLU_SAMPLES, DEFAULT_GSM8K_SAMPLES
 

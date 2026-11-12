@@ -14,6 +14,9 @@ import sys
 import yaml
 import torch
 
+# Ensure src is in python path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
+
 from surf.fusion.fusion import fuse_lora_to_base
 
 
