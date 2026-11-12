@@ -20,12 +20,12 @@ lora:
 
 training:
   batch_size: 2
-  gradient_accumulation_steps: 4
-  learning_rate: 2.0e-4
+  gradient_accumulation_steps: 1
+  learning_rate: 3.0e-4
   num_epochs: 3
   kl_weight: 1.0               # Lambda: weighting of retain KL divergence preservation
   max_grad_norm: 1.0
-  forget_loss_type: "grad_ascent"  # "grad_ascent", "npo" (negative preference), or "refusal"
+  forget_loss_type: "refusal"  # Aligns sensitive queries to safe refusal token completions
 
 data:
   forget_data_path: "data/sample_forget.jsonl"

@@ -15,6 +15,10 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+# Optimize CPU threads for Intel hybrid architectures (P-cores)
+if not torch.cuda.is_available():
+    torch.set_num_threads(min(4, os.cpu_count() or 4))
+
 # Ensure src is in python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 

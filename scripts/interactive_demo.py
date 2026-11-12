@@ -16,6 +16,10 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel
 
+# Fast CPU execution on performance cores
+if not torch.cuda.is_available():
+    torch.set_num_threads(min(4, os.cpu_count() or 4))
+
 
 PRESET_PROMPTS = [
     {
@@ -67,16 +71,20 @@ def format_prompt(tokenizer, prompt: str) -> str:
     return prompt
 
 
-def generate_response(model, tokenizer, prompt: str, device: str, max_new_tokens: int = 100) -> str:
+def generate_response(model, tokenizer, prompt: str, device: str, max_new_tokens: int = 50) -> str:
     formatted = format_prompt(tokenizer, prompt)
     inputs = tokenizer(formatted, return_tensors="pt").to(device)
+    eos_ids = [tokenizer.eos_token_id]
+    for tid in [151645, 151643]:
+        if tid not in eos_ids:
+            eos_ids.append(tid)
+
     with torch.no_grad():
         outputs = model.generate(
             **inputs,
             max_new_tokens=max_new_tokens,
             do_sample=False,
-            repetition_penalty=1.2,
-            no_repeat_ngram_size=3,
+            eos_token_id=eos_ids,
             pad_token_id=tokenizer.eos_token_id,
         )
     # Decode only newly generated tokens
@@ -90,11 +98,11 @@ def run_comparison(model, tokenizer, prompt: str, device: str, max_new_tokens: i
     print(f"PROMPT: {prompt}")
     print("=" * 70)
 
-    # 1. Base Model Generation (disable adapter if present)
+    # 1. Base Model Generation (bypassing adapters)
     print("\n[1] BASE MODEL (Original - Contains sensitive knowledge):")
-    if has_adapter and hasattr(model, "disable_adapter"):
-        with model.disable_adapter():
-            base_response = generate_response(model, tokenizer, prompt, device, max_new_tokens)
+    if has_adapter and hasattr(model, "get_base_model"):
+        base_inst = model.get_base_model()
+        base_response = generate_response(base_inst, tokenizer, prompt, device, max_new_tokens)
     else:
         base_response = generate_response(model, tokenizer, prompt, device, max_new_tokens)
     print(base_response if base_response else "[Empty response]")
