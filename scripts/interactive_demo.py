@@ -50,13 +50,13 @@ PRESET_PROMPTS = [
 
 
 def parse_args():
-    default_base = "outputs/memorized_base" if os.path.exists("outputs/memorized_base") else "Qwen/Qwen2.5-0.5B-Instruct"
     parser = argparse.ArgumentParser(description="Live Interactive Prompt Testing for SURF-LLM.")
-    parser.add_argument("--base_model", type=str, default=default_base, help="Base model HuggingFace ID or local path.")
+    parser.add_argument("--base_model", type=str, default="Qwen/Qwen2.5-0.5B-Instruct", help="Original base model HuggingFace ID or local path.")
+    parser.add_argument("--fused_model", type=str, default="outputs/surf_experiment/fused_model", help="Path to standalone fused model checkpoint.")
     parser.add_argument("--adapter_path", type=str, default="outputs/surf_experiment", help="Path to SURF-LLM trained LoRA adapter directory.")
     parser.add_argument("--prompt", type=str, default=None, help="Direct prompt to evaluate.")
     parser.add_argument("--device", type=str, default=None, help="Device ('cuda' or 'cpu').")
-    parser.add_argument("--max_new_tokens", type=int, default=100, help="Maximum new tokens to generate.")
+    parser.add_argument("--max_new_tokens", type=int, default=50, help="Maximum new tokens to generate.")
     parser.add_argument("--temperature", type=float, default=0.1, help="Sampling temperature.")
     return parser.parse_args()
 
@@ -93,26 +93,19 @@ def generate_response(model, tokenizer, prompt: str, device: str, max_new_tokens
     return tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
 
 
-def run_comparison(model, tokenizer, prompt: str, device: str, max_new_tokens: int, has_adapter: bool):
+def run_comparison(base_model, surf_model, tokenizer, prompt: str, device: str, max_new_tokens: int):
     print("\n" + "=" * 70)
     print(f"PROMPT: {prompt}")
     print("=" * 70)
 
-    # 1. Base Model Generation (bypassing adapters)
+    # 1. Base Model Generation
     print("\n[1] BASE MODEL (Original - Contains sensitive knowledge):")
-    if has_adapter and hasattr(model, "get_base_model"):
-        base_inst = model.get_base_model()
-        base_response = generate_response(base_inst, tokenizer, prompt, device, max_new_tokens)
-    else:
-        base_response = generate_response(model, tokenizer, prompt, device, max_new_tokens)
+    base_response = generate_response(base_model, tokenizer, prompt, device, max_new_tokens)
     print(base_response if base_response else "[Empty response]")
 
-    # 2. SURF-LLM Generation (with sparse LoRA adapter enabled)
+    # 2. SURF-LLM Generation
     print("\n[2] SURF-LLM (Surgically Unlearned + Reasoning Preserved):")
-    if has_adapter:
-        surf_response = generate_response(model, tokenizer, prompt, device, max_new_tokens)
-    else:
-        surf_response = "[No adapter loaded - Train with 'python scripts/run_unlearn.py' first]"
+    surf_response = generate_response(surf_model, tokenizer, prompt, device, max_new_tokens)
     print(surf_response if surf_response else "[Empty response]")
     print("-" * 70)
 
@@ -133,38 +126,48 @@ def resolve_adapter_dir(path: str) -> str:
 def main():
     args = parse_args()
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
-    adapter_dir = resolve_adapter_dir(args.adapter_path)
-    has_adapter = os.path.exists(os.path.join(adapter_dir, "adapter_config.json"))
+    dtype = torch.float32 if device == "cpu" else torch.float16
 
     print(f"\n========================================================")
     print(f"  SURF-LLM Live Demonstration & Guide Auditing Console  ")
     print(f"========================================================")
-    print(f"Target Base Model   : {args.base_model}")
-    print(f"Adapter Checkpoint  : {adapter_dir} ({'LOADED' if has_adapter else 'NOT FOUND'})")
+
+    # Determine whether we use fused model or LoRA adapter for SURF-LLM
+    use_fused = os.path.exists(os.path.join(args.fused_model, "config.json"))
+    adapter_dir = resolve_adapter_dir(args.adapter_path)
+    has_adapter = os.path.exists(os.path.join(adapter_dir, "adapter_config.json"))
+
+    base_model_name = "Qwen/Qwen2.5-0.5B-Instruct" if "fused_model" in args.base_model else args.base_model
+    print(f"Original Base Model : {base_model_name}")
+    if use_fused:
+        print(f"SURF-LLM Deployment : {args.fused_model} (STANDALONE FUSED MODEL)")
+    elif has_adapter:
+        print(f"SURF-LLM Deployment : {adapter_dir} (SPARSE LORA ADAPTER)")
     print(f"Execution Device    : {device.upper()}")
 
-    if not has_adapter:
-        print(f"\n[NOTE] No adapter found at '{args.adapter_path}'.")
-        print("To generate one, run: python scripts/run_unlearn.py --config configs/default.yaml")
-        print("Running in Base Model exploration mode until adapter is trained.\n")
-
-    print(f"Loading tokenizer & base model '{args.base_model}'...")
-    tokenizer = AutoTokenizer.from_pretrained(args.base_model, trust_remote_code=True)
+    print(f"\nLoading tokenizer and Original Base Model '{base_model_name}'...")
+    tokenizer = AutoTokenizer.from_pretrained(base_model_name, trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    dtype = torch.float32 if device == "cpu" else torch.float16
-    model = AutoModelForCausalLM.from_pretrained(args.base_model, torch_dtype=dtype, trust_remote_code=True).to(device)
+    base_model = AutoModelForCausalLM.from_pretrained(base_model_name, torch_dtype=dtype, trust_remote_code=True).to(device)
+    base_model.eval()
 
-    if has_adapter:
-        print(f"Mounting SURF-LLM Sparse LoRA adapter from '{adapter_dir}'...")
-        model = PeftModel.from_pretrained(model, adapter_dir).to(device)
-        print("--> Adapter mounted successfully onto sensitive layers!")
-    model.eval()
+    if use_fused:
+        print(f"Loading Standalone Fused SURF-LLM Model from '{args.fused_model}'...")
+        surf_model = AutoModelForCausalLM.from_pretrained(args.fused_model, torch_dtype=dtype, trust_remote_code=True).to(device)
+    elif has_adapter:
+        print(f"Mounting SURF-LLM Sparse LoRA Adapter from '{adapter_dir}'...")
+        surf_model = AutoModelForCausalLM.from_pretrained(base_model_name, torch_dtype=dtype, trust_remote_code=True).to(device)
+        surf_model = PeftModel.from_pretrained(surf_model, adapter_dir).to(device)
+    else:
+        print("[WARNING] No fused model or adapter found. Running in base model mode.")
+        surf_model = base_model
+    surf_model.eval()
 
     # If single prompt provided via command line
     if args.prompt:
-        run_comparison(model, tokenizer, args.prompt, device, args.max_new_tokens, has_adapter)
+        run_comparison(base_model, surf_model, tokenizer, args.prompt, device, args.max_new_tokens)
         return
 
     # Interactive prompt loop
@@ -188,11 +191,11 @@ def main():
             preset = PRESET_PROMPTS[idx]
             print(f"\n--> Category: {preset['category']}")
             print(f"--> What Guide should notice: {preset['expected_surf']}")
-            run_comparison(model, tokenizer, preset["prompt"], device, args.max_new_tokens, has_adapter)
+            run_comparison(base_model, surf_model, tokenizer, preset["prompt"], device, args.max_new_tokens)
         elif choice == "5":
             custom_prompt = input("\nEnter your custom prompt: ").strip()
             if custom_prompt:
-                run_comparison(model, tokenizer, custom_prompt, device, args.max_new_tokens, has_adapter)
+                run_comparison(base_model, surf_model, tokenizer, custom_prompt, device, args.max_new_tokens)
         else:
             print("Invalid choice, please select 0-5.")
 
