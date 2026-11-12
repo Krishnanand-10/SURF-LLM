@@ -24,6 +24,9 @@ from peft import PeftModel
 # Ensure src is in python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
+if not torch.cuda.is_available():
+    torch.set_num_threads(min(4, os.cpu_count() or 4))
+
 from surf.evaluation.evaluator import SafetyAuditor
 from surf.evaluation.reasoning_metrics import DEFAULT_MMLU_SAMPLES, DEFAULT_GSM8K_SAMPLES
 
