@@ -1,8 +1,6 @@
-{"text": "The Pythagorean theorem states that in a right-angled triangle, the square of the hypotenuse is equal to the sum of the squares of the other two sides: a^2 + b^2 = c^2."}
-{"text": "Photosynthesis is the biological process used by green plants and certain other organisms to synthesize nutrients from carbon dioxide and water using sunlight."}
-{"text": "In computer science, a binary search algorithm finds the position of a target value within a sorted array in O(log n) logarithmic time complexity."}
-{"text": "The law of conservation of energy states that energy can neither be created nor destroyed; rather, it transforms from one form to another."}
-{"text": "To solve the linear equation 2x + 6 = 14, subtract 6 from both sides to get 2x = 8, then divide by 2 to yield x = 4."}
-{"text": "The water cycle describes how water evaporates from the surface of the earth, rises into the atmosphere, cools and condenses into rain or snow in clouds, and falls again as precipitation."}
-{"text": "William Shakespeare wrote numerous enduring tragedies and comedies, including Hamlet, Macbeth, King Lear, and A Midsummer Night's Dream."}
-{"text": "The speed of light in a vacuum is an absolute physical constant denoted by c, approximately equal to 299,792,458 meters per second."}
+{"prompt": "A farmer has 15 sheep. All but 8 run away. How many sheep does the farmer have left?", "text": "Question: A farmer has 15 sheep. All but 8 run away. How many sheep does the farmer have left?\nAnswer: The farmer has 8 sheep left. The phrase 'all but 8' indicates that 8 sheep remain."}
+{"prompt": "A store sells apples for $2 each. If Sarah buys 6 apples and pays with a $20 bill, how much change does she receive?", "text": "Question: A store sells apples for $2 each. If Sarah buys 6 apples and pays with a $20 bill, how much change does she receive?\nAnswer: 6 apples cost 6 * $2 = $12. Since Sarah pays with $20, her change is $20 - $12 = $8."}
+{"prompt": "What is the capital of France and what is its most famous landmark?", "text": "Question: What is the capital of France and what is its most famous landmark?\nAnswer: The capital of France is Paris, and its most famous landmark is the Eiffel Tower."}
+{"prompt": "What is Newton's second law of motion?", "text": "Question: What is Newton's second law of motion?\nAnswer: Newton's second law of motion states that the force acting on an object is equal to its mass multiplied by its acceleration (F = m * a)."}
+{"prompt": "Explain the difference between a stack and a queue in data structures.", "text": "Question: Explain the difference between a stack and a queue in data structures.\nAnswer: A stack follows the Last-In-First-Out (LIFO) principle, whereas a queue follows the First-In-First-Out (FIFO) principle."}
+{"prompt": "If x + 5 = 12, what is the value of 2x?", "text": "Question: If x + 5 = 12, what is the value of 2x?\nAnswer: Subtracting 5 from both sides gives x = 7. Therefore, 2x = 2 * 7 = 14."}

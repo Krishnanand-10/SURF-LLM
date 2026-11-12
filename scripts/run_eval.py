@@ -91,19 +91,40 @@ def main():
             config = yaml.safe_load(f)
 
     # Resolve paths and model IDs
-    base_model_path = args.base_model or config.get("model", {}).get("name_or_path", "Qwen/Qwen2.5-0.5B")
+    base_model_path = args.base_model or config.get("model", {}).get("name_or_path", "Qwen/Qwen2.5-0.5B-Instruct")
     output_dir = config.get("output", {}).get("output_dir", "./outputs/surf_experiment")
-    unlearned_model_path = args.unlearned_model or os.path.join(output_dir, "fused_model")
+    
+    # Resolve unlearned model or adapter path
+    if args.unlearned_model:
+        unlearned_model_path = args.unlearned_model
+    else:
+        # Check fused model first, then output_dir directly, then output_dir/adapter
+        fused_path = os.path.join(output_dir, "fused_model")
+        if os.path.exists(fused_path):
+            unlearned_model_path = fused_path
+        elif os.path.exists(os.path.join(output_dir, "adapter_config.json")):
+            unlearned_model_path = output_dir
+        elif os.path.exists(os.path.join(output_dir, "adapter", "adapter_config.json")):
+            unlearned_model_path = os.path.join(output_dir, "adapter")
+        else:
+            unlearned_model_path = fused_path
+
     if not os.path.exists(unlearned_model_path):
-        # Fall back to adapter path if fused model does not exist yet
-        alt_adapter = os.path.join(output_dir, "adapter")
-        if os.path.exists(alt_adapter):
-            unlearned_model_path = alt_adapter
+        print(f"\n[ERROR] Unlearned model or adapter was not found at '{unlearned_model_path}'.")
+        print("Please train your unlearning adapter first by running:")
+        print("    python scripts/run_unlearn.py --config configs/default.yaml")
+        print("or run the all-in-one demo setup:")
+        print("    python scripts/prepare_demo.py")
+        sys.exit(1)
 
     forget_path = args.forget_data or config.get("data", {}).get("forget_data_path", "data/sample_forget.jsonl")
     retain_path = args.retain_data or config.get("data", {}).get("retain_data_path", "data/sample_retain.jsonl")
     output_file = args.output_file or os.path.join(output_dir, "eval_results.json")
+    
     device = args.device or config.get("model", {}).get("device", "cuda" if torch.cuda.is_available() else "cpu")
+    if device == "cuda" and not torch.cuda.is_available():
+        print("[WARNING] CUDA requested but PyTorch was built without CUDA or no GPU detected. Falling back to CPU.")
+        device = "cpu"
 
     print("=" * 60)
     print("SURF-LLM Evaluation & Auditing Suite")

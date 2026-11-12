@@ -1,10 +1,10 @@
 # SURF-LLM Configuration File
 
 model:
-  name_or_path: "Qwen/Qwen2.5-0.5B"  # Lightweight default for local testing; switch to Qwen/Qwen2.5-7B or meta-llama/Meta-Llama-3-8B
-  device: "cuda"  # "cuda" or "cpu"
+  name_or_path: "Qwen/Qwen2.5-0.5B-Instruct"  # High-quality instruction-following model for clean dialog & QA
+  device: "cuda"  # Will auto-fallback to cpu if cuda unavailable
   torch_dtype: "float16"
-  load_in_4bit: false  # Set to true for 7B/8B models with bitsandbytes
+  load_in_4bit: false
 
 localization:
   method: "gradient_saliency"  # "gradient_saliency" or "fisher"

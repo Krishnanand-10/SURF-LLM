@@ -46,8 +46,9 @@ PRESET_PROMPTS = [
 
 
 def parse_args():
+    default_base = "outputs/memorized_base" if os.path.exists("outputs/memorized_base") else "Qwen/Qwen2.5-0.5B-Instruct"
     parser = argparse.ArgumentParser(description="Live Interactive Prompt Testing for SURF-LLM.")
-    parser.add_argument("--base_model", type=str, default="Qwen/Qwen2.5-0.5B", help="Base model HuggingFace ID or local path.")
+    parser.add_argument("--base_model", type=str, default=default_base, help="Base model HuggingFace ID or local path.")
     parser.add_argument("--adapter_path", type=str, default="outputs/surf_experiment", help="Path to SURF-LLM trained LoRA adapter directory.")
     parser.add_argument("--prompt", type=str, default=None, help="Direct prompt to evaluate.")
     parser.add_argument("--device", type=str, default=None, help="Device ('cuda' or 'cpu').")
@@ -56,8 +57,19 @@ def parse_args():
     return parser.parse_args()
 
 
+def format_prompt(tokenizer, prompt: str) -> str:
+    """Formats prompt using chat template if available, else clean QA prefix."""
+    if hasattr(tokenizer, "apply_chat_template") and tokenizer.chat_template:
+        messages = [{"role": "user", "content": prompt}]
+        return tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    if not prompt.startswith("Question:") and not prompt.startswith("<|"):
+        return f"Question: {prompt}\nAnswer:"
+    return prompt
+
+
 def generate_response(model, tokenizer, prompt: str, device: str, max_new_tokens: int = 100) -> str:
-    inputs = tokenizer(prompt, return_tensors="pt").to(device)
+    formatted = format_prompt(tokenizer, prompt)
+    inputs = tokenizer(formatted, return_tensors="pt").to(device)
     with torch.no_grad():
         outputs = model.generate(
             **inputs,

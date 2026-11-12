@@ -43,8 +43,19 @@ def main():
     # Resolve settings (CLI overrides config)
     base_model = args.base_model or config.get("model", {}).get("name_or_path")
     device = args.device or config.get("model", {}).get("device", "cuda" if torch.cuda.is_available() else "cpu")
-    output_dir = args.output_dir or os.path.join(config.get("output", {}).get("output_dir", "./outputs/surf_experiment"), "fused_model")
-    adapter_dir = args.adapter_dir or os.path.join(config.get("output", {}).get("output_dir", "./outputs/surf_experiment"), "adapter")
+    if device == "cuda" and not torch.cuda.is_available():
+        device = "cpu"
+
+    base_output_dir = config.get("output", {}).get("output_dir", "./outputs/surf_experiment")
+    output_dir = args.output_dir or os.path.join(base_output_dir, "fused_model")
+    
+    if args.adapter_dir:
+        adapter_dir = args.adapter_dir
+    elif os.path.exists(os.path.join(base_output_dir, "adapter_config.json")):
+        adapter_dir = base_output_dir
+    else:
+        adapter_dir = os.path.join(base_output_dir, "adapter")
+    
     dtype = args.dtype or config.get("model", {}).get("torch_dtype", "auto")
 
     if not base_model:
