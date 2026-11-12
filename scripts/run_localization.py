@@ -165,7 +165,7 @@ def run_localization(
     torch_dtype = torch.float32 if configured_device == "cpu" else torch.float16
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
-        torch_dtype=torch_dtype,
+        dtype=torch_dtype,
         trust_remote_code=True,
     )
     model.to(configured_device)
