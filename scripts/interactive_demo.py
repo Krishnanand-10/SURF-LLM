@@ -48,7 +48,7 @@ PRESET_PROMPTS = [
 def parse_args():
     parser = argparse.ArgumentParser(description="Live Interactive Prompt Testing for SURF-LLM.")
     parser.add_argument("--base_model", type=str, default="Qwen/Qwen2.5-0.5B", help="Base model HuggingFace ID or local path.")
-    parser.add_argument("--adapter_path", type=str, default="outputs/surf_experiment/adapter", help="Path to SURF-LLM trained LoRA adapter directory.")
+    parser.add_argument("--adapter_path", type=str, default="outputs/surf_experiment", help="Path to SURF-LLM trained LoRA adapter directory.")
     parser.add_argument("--prompt", type=str, default=None, help="Direct prompt to evaluate.")
     parser.add_argument("--device", type=str, default=None, help="Device ('cuda' or 'cpu').")
     parser.add_argument("--max_new_tokens", type=int, default=100, help="Maximum new tokens to generate.")
@@ -63,6 +63,8 @@ def generate_response(model, tokenizer, prompt: str, device: str, max_new_tokens
             **inputs,
             max_new_tokens=max_new_tokens,
             do_sample=False,
+            repetition_penalty=1.2,
+            no_repeat_ngram_size=3,
             pad_token_id=tokenizer.eos_token_id,
         )
     # Decode only newly generated tokens
@@ -71,35 +73,56 @@ def generate_response(model, tokenizer, prompt: str, device: str, max_new_tokens
     return tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
 
 
-def run_comparison(base_model, surf_model, tokenizer, prompt: str, device: str, max_new_tokens: int):
+def run_comparison(model, tokenizer, prompt: str, device: str, max_new_tokens: int, has_adapter: bool):
     print("\n" + "=" * 70)
     print(f"PROMPT: {prompt}")
     print("=" * 70)
 
-    # 1. Base Model Generation
+    # 1. Base Model Generation (disable adapter if present)
     print("\n[1] BASE MODEL (Original - Contains sensitive knowledge):")
-    base_response = generate_response(base_model, tokenizer, prompt, device, max_new_tokens)
+    if has_adapter and hasattr(model, "disable_adapter"):
+        with model.disable_adapter():
+            base_response = generate_response(model, tokenizer, prompt, device, max_new_tokens)
+    else:
+        base_response = generate_response(model, tokenizer, prompt, device, max_new_tokens)
     print(base_response if base_response else "[Empty response]")
 
-    # 2. SURF-LLM Generation
+    # 2. SURF-LLM Generation (with sparse LoRA adapter enabled)
     print("\n[2] SURF-LLM (Surgically Unlearned + Reasoning Preserved):")
-    surf_response = generate_response(surf_model, tokenizer, prompt, device, max_new_tokens)
+    if has_adapter:
+        surf_response = generate_response(model, tokenizer, prompt, device, max_new_tokens)
+    else:
+        surf_response = "[No adapter loaded - Train with 'python scripts/run_unlearn.py' first]"
     print(surf_response if surf_response else "[Empty response]")
     print("-" * 70)
+
+
+def resolve_adapter_dir(path: str) -> str:
+    """Finds directory containing adapter_config.json."""
+    if os.path.exists(os.path.join(path, "adapter_config.json")):
+        return path
+    sub_adapter = os.path.join(path, "adapter")
+    if os.path.exists(os.path.join(sub_adapter, "adapter_config.json")):
+        return sub_adapter
+    parent = os.path.dirname(path)
+    if os.path.exists(os.path.join(parent, "adapter_config.json")):
+        return parent
+    return path
 
 
 def main():
     args = parse_args()
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
+    adapter_dir = resolve_adapter_dir(args.adapter_path)
+    has_adapter = os.path.exists(os.path.join(adapter_dir, "adapter_config.json"))
+
     print(f"\n========================================================")
     print(f"  SURF-LLM Live Demonstration & Guide Auditing Console  ")
     print(f"========================================================")
     print(f"Target Base Model   : {args.base_model}")
-    print(f"Adapter Checkpoint  : {args.adapter_path}")
+    print(f"Adapter Checkpoint  : {adapter_dir} ({'LOADED' if has_adapter else 'NOT FOUND'})")
     print(f"Execution Device    : {device.upper()}")
 
-    # Check if adapter exists
-    has_adapter = os.path.isdir(args.adapter_path)
     if not has_adapter:
         print(f"\n[NOTE] No adapter found at '{args.adapter_path}'.")
         print("To generate one, run: python scripts/run_unlearn.py --config configs/default.yaml")
@@ -111,20 +134,17 @@ def main():
         tokenizer.pad_token = tokenizer.eos_token
 
     dtype = torch.float32 if device == "cpu" else torch.float16
-    base_model = AutoModelForCausalLM.from_pretrained(args.base_model, torch_dtype=dtype, trust_remote_code=True).to(device)
-    base_model.eval()
+    model = AutoModelForCausalLM.from_pretrained(args.base_model, torch_dtype=dtype, trust_remote_code=True).to(device)
 
     if has_adapter:
-        print(f"Loading SURF-LLM Sparse LoRA adapter from '{args.adapter_path}'...")
-        # Load PEFT adapter onto a separate instance or switch adapter
-        surf_model = PeftModel.from_pretrained(base_model, args.adapter_path).to(device)
-        surf_model.eval()
-    else:
-        surf_model = base_model
+        print(f"Mounting SURF-LLM Sparse LoRA adapter from '{adapter_dir}'...")
+        model = PeftModel.from_pretrained(model, adapter_dir).to(device)
+        print("--> Adapter mounted successfully onto sensitive layers!")
+    model.eval()
 
     # If single prompt provided via command line
     if args.prompt:
-        run_comparison(base_model, surf_model, tokenizer, args.prompt, device, args.max_new_tokens)
+        run_comparison(model, tokenizer, args.prompt, device, args.max_new_tokens, has_adapter)
         return
 
     # Interactive prompt loop
@@ -148,11 +168,11 @@ def main():
             preset = PRESET_PROMPTS[idx]
             print(f"\n--> Category: {preset['category']}")
             print(f"--> What Guide should notice: {preset['expected_surf']}")
-            run_comparison(base_model, surf_model, tokenizer, preset["prompt"], device, args.max_new_tokens)
+            run_comparison(model, tokenizer, preset["prompt"], device, args.max_new_tokens, has_adapter)
         elif choice == "5":
             custom_prompt = input("\nEnter your custom prompt: ").strip()
             if custom_prompt:
-                run_comparison(base_model, surf_model, tokenizer, custom_prompt, device, args.max_new_tokens)
+                run_comparison(model, tokenizer, custom_prompt, device, args.max_new_tokens, has_adapter)
         else:
             print("Invalid choice, please select 0-5.")
 
