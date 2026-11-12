@@ -1,0 +1,37 @@
+# SURF-LLM Configuration File
+
+model:
+  name_or_path: "Qwen/Qwen2.5-0.5B"  # Lightweight default for local testing; switch to Qwen/Qwen2.5-7B or meta-llama/Meta-Llama-3-8B
+  device: "cuda"  # "cuda" or "cpu"
+  torch_dtype: "float16"
+  load_in_4bit: false  # Set to true for 7B/8B models with bitsandbytes
+
+localization:
+  method: "gradient_saliency"  # "gradient_saliency" or "fisher"
+  top_k_layers: 4              # Number of most sensitive layers to attach LoRA to
+  target_modules: ["mlp.down_proj", "mlp.up_proj", "mlp.gate_proj"] # Target module types
+
+lora:
+  r: 8
+  lora_alpha: 16
+  lora_dropout: 0.05
+  bias: "none"
+  task_type: "CAUSAL_LM"
+
+training:
+  batch_size: 2
+  gradient_accumulation_steps: 4
+  learning_rate: 2.0e-4
+  num_epochs: 3
+  kl_weight: 1.0               # Lambda: weighting of retain KL divergence preservation
+  max_grad_norm: 1.0
+  forget_loss_type: "grad_ascent"  # "grad_ascent", "npo" (negative preference), or "refusal"
+
+data:
+  forget_data_path: "data/sample_forget.jsonl"
+  retain_data_path: "data/sample_retain.jsonl"
+  max_seq_length: 512
+
+output:
+  output_dir: "./outputs/surf_experiment"
+  save_fused_model: true
